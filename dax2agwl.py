@@ -7,8 +7,8 @@ from xml.dom import minidom
     
 
 if __name__ == "__main__":
-    #tree = ET.parse('soykb.dax')
-    tree = ET.parse('1000genome.dax')
+    tree = ET.parse('soykb.dax')
+    #tree = ET.parse('1000genome.dax')
     root = tree.getroot()
     
     files = root.findall('{http://pegasus.isi.edu/schema/DAX}file')
@@ -38,6 +38,7 @@ if __name__ == "__main__":
         # obtaining arguments
         jobs_dictionary[job.attrib['id']]['arguments'] = []
         argument = job.find('{http://pegasus.isi.edu/schema/DAX}argument')
+        #print(job.attrib['id'])
         if argument is not None:
             sub_files = argument.findall('{http://pegasus.isi.edu/schema/DAX}file')            
             if len(sub_files) == 0:
@@ -46,11 +47,13 @@ if __name__ == "__main__":
             else:
                 i = 0
                 for text in argument.itertext():
+                    #print(text)
                     if i < len(sub_files):
-                        jobs_dictionary[job.attrib['id']]['arguments'].append([argument.text,sub_files[i].attrib['name']])
+                        jobs_dictionary[job.attrib['id']]['arguments'].append(([text,sub_files[i].attrib['name']]))
                         i = i + 1
                     else:
-                        jobs_dictionary[job.attrib['id']]['arguments'].append(text)
+                        jobs_dictionary[job.attrib['id']]['arguments'].append((text))
+                    #print(jobs_dictionary[job.attrib['id']]['arguments'])
 
 
 
@@ -215,7 +218,47 @@ if __name__ == "__main__":
     
 
     #pretty print of the workflow
-    rough_string = ET.tostring(agwl_format, 'utf-8')
-    reparsed = minidom.parseString(rough_string)
+    #rough_string = ET.tostring(agwl_format, 'utf-8')
+    #reparsed = minidom.parseString(rough_string)
 
-    print(reparsed.toprettyxml(indent="  "))
+    #print(reparsed.toprettyxml(indent="  "))
+
+    #generation of the gwld file
+    print('application = parser-workflow')
+    print('parser-workflow.type = parser-workflow')
+    print('parser-workflow.domain = parser-workflow')
+    print('parser-workflow.environment = ssh')
+    print('DELIM = AND')
+    print('')
+
+    activities_string = 'parser-workflow.activities='
+    for job in  jobs_dictionary:
+        activities_string += 'parser-workflow\\:'+job+" "
+    print(activities_string)    
+
+
+    for job in  jobs_dictionary:
+        print('parser-workflow:\\'+job+'.executable='+jobs_dictionary[job]['executable'])
+        usage_string = 'parser-workflow:\\'+job+'.usage='
+
+        for arg in jobs_dictionary[job]['arguments']:            
+            usage_string += ''.join(arg)
+        print(usage_string)
+
+        input_ports = 'parser-workflow:\\'+job+'.inports='
+        for file in jobs_dictionary[job]['inputs'][:-1]:
+            input_ports += file+' '+file+' agwl:file'+' AND \\\n'
+
+        if len(jobs_dictionary[job]['inputs']) > 1 :    
+            input_ports += jobs_dictionary[job]['inputs'][-1] +' '+jobs_dictionary[job]['inputs'][-1]+' agwl:file'
+        print(input_ports)
+    
+        output_ports = 'parser-workflow:\\'+job+'.outports='
+        for file in jobs_dictionary[job]['outputs'][:-1]:
+            output_ports += file+' '+file+' agwl:file'+' AND \\\n'
+            
+        if len(jobs_dictionary[job]['outputs']) > 1 :    
+            output_ports += jobs_dictionary[job]['outputs'][-1] +' '+ jobs_dictionary[job]['outputs'][-1]+' agwl:file'
+        print(output_ports)
+
+        

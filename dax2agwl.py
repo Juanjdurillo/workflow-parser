@@ -1,36 +1,32 @@
+import sys
+import os
 import xml.etree.ElementTree as ET
 import collections
 from xml.dom import minidom
 
 
 
-    
-
-if __name__ == "__main__":
-    tree = ET.parse('soykb.dax')
-    #tree = ET.parse('1000genome.dax')
-    root = tree.getroot()
-    
-    files = root.findall('{http://pegasus.isi.edu/schema/DAX}file')
-    executables = root.findall('{http://pegasus.isi.edu/schema/DAX}executable')
-    jobs = root.findall('{http://pegasus.isi.edu/schema/DAX}job')
-    dependencies = root.findall('{http://pegasus.isi.edu/schema/DAX}child')
-
-
-
+def buildFilesDictionary(files):
     files_dictionary = {}
     # a file has a single element pfn with the url of the file
     for file in files:
         files_dictionary[file.attrib['name']] = file[0].attrib['url']
-    
+
+    return files_dictionary
+####buildFilesDictionary
+
+def buildExecutablesDictionary(executables):
     executables_dictionary = {}
     # a executable has a single element pfn with the url of the file
     for executable in executables:
-        executables_dictionary[executable.attrib['name']] = file[0].attrib['url']
+        executables_dictionary[executable.attrib['name']] = executable[0].attrib['url']
 
-    #print("List of executables")
-    #print(executables_dictionary)
-    jobs_dictionary = collections.OrderedDict()#{}
+    return executables_dictionary
+####buildExecutablesDictionary
+
+
+def buildJobsDictionary(jobs,dependencies):
+    jobs_dictionary = collections.OrderedDict()
     for job in jobs:
         jobs_dictionary[job.attrib['id']] = {}
         # obtaining executable
@@ -40,7 +36,7 @@ if __name__ == "__main__":
         argument = job.find('{http://pegasus.isi.edu/schema/DAX}argument')
         #print(job.attrib['id'])
         if argument is not None:
-            sub_files = argument.findall('{http://pegasus.isi.edu/schema/DAX}file')            
+            sub_files = argument.findall('{http://pegasus.isi.edu/schema/DAX}file')
             if len(sub_files) == 0:
                 # this is a hardcoded argument
                 jobs_dictionary[job.attrib['id']]['arguments'].append(argument.text)
@@ -63,12 +59,12 @@ if __name__ == "__main__":
         jobs_dictionary[job.attrib['id']]['outputs'] = []
 
 
-        uses = job.findall('{http://pegasus.isi.edu/schema/DAX}uses')        
+        uses = job.findall('{http://pegasus.isi.edu/schema/DAX}uses')
         for use in uses:
             if use.attrib['link'] == "input":
-                 jobs_dictionary[job.attrib['id']]['inputs'].append(use.attrib['name'])   
+                 jobs_dictionary[job.attrib['id']]['inputs'].append(use.attrib['name'])
             else:
-                jobs_dictionary[job.attrib['id']]['outputs'].append(use.attrib['name'])   
+                jobs_dictionary[job.attrib['id']]['outputs'].append(use.attrib['name'])
 
         jobs_dictionary[job.attrib['id']]['depends'] = []
         jobs_dictionary[job.attrib['id']]['parent'] = []
@@ -80,22 +76,22 @@ if __name__ == "__main__":
         for parent in parents:
             jobs_dictionary[dependence.attrib['ref']]['depends'].append(parent.attrib['ref'])
             jobs_dictionary[parent.attrib['ref']]['parent'].append(dependence.attrib['ref'])
-        
-        
 
 
-        
-    # transforming the workflow to agwl
-    agwl_format = ET.Element('cgwd',attrib={'author':'parser', 'domain' : '', 'name' : 'parser-workflow', 'version':''})
-    
+    return jobs_dictionary
+####buildJobsDictionary
 
-    #inputs of the workflow
+def createBaseXML():
+    return ET.Element('cgwd',attrib={'author':'parser', 'domain' : '', 'name' : 'parser-workflow', 'version':''})
+####createBaseXML
+
+def addWorkflowInputs(agwl_format,files_dictionary):
     workflow_inputs = ET.SubElement(agwl_format,'cgwdInput')
     for file in files_dictionary:
         dataIn =ET.SubElement(workflow_inputs,'dataIn')
         dataIn.attrib={'category':'Data', 'name':file, 'source':files_dictionary[file],'type':'agwl:file'}
         dataRepresentation = ET.SubElement(dataIn,'dataRepresentation')
-        
+
         storageType = ET.SubElement(dataRepresentation,'storageType')
         storageType.text= 'FileSystem'
         contentType = ET.SubElement(dataRepresentation,'contentType')
@@ -104,6 +100,38 @@ if __name__ == "__main__":
         archiveType.text='none'
         cardinality = ET.SubElement(dataRepresentation,'cardinality')
         cardinality.text='single'
+    return agwl_format
+####addWorkflowInputs
+
+
+
+if __name__ == "__main__":
+
+    ## Checking correct number of arguments
+    if len(sys.argv) < 2:
+        print("Usage dax2agwl [file.dax]")
+        sys.exit()
+
+
+    daxFile=sys.argv[1]
+    # Checks the input file exists
+    if not os.path.exists(daxFile):
+        print("File "+daxFile+" not found")
+        sys.exit()
+
+    # Obtaining the root of the xml representing the workflow in dax format
+    root = ET.parse(daxFile).getroot()
+
+    files_dictionary = buildFilesDictionary(root.findall('{http://pegasus.isi.edu/schema/DAX}file'))
+    executables_dictionary = buildExecutablesDictionary(root.findall('{http://pegasus.isi.edu/schema/DAX}executable'))
+    jobs_dictionary = buildJobsDictionary(root.findall('{http://pegasus.isi.edu/schema/DAX}job'),root.findall('{http://pegasus.isi.edu/schema/DAX}child'))
+
+    # Create an empty agwl workflow
+    agwl_format = createBaseXML()
+
+    #add inputs to a given workflow, based on the files_dictionary
+    agwl_format = addWorkflowInputs(agwl_format,files_dictionary)
+
 
     # getting the tasks to be executed
     body = ET.SubElement(agwl_format,'cgwdBody')
@@ -139,7 +167,7 @@ if __name__ == "__main__":
             #print('considering',job)
             independent_jobs.remove(job)
         #for job in independent_jobs:
-            
+
             element = body
             if parallel_mode:
                 section = ET.SubElement(parallelBody,'section')
@@ -159,7 +187,7 @@ if __name__ == "__main__":
                         if input_file in jobs_dictionary[parent]['outputs']:
                             dataIn.attrib={'category':'Data','name':input_file,'source':parent+'/' +input_file,'type':'agwl:file'}
                             break
-            
+
                 dataRepresentation = ET.SubElement(dataIn,'dataRepresentation')
                 storageType = ET.SubElement(dataRepresentation,'storageType')
                 storageType.text= 'FileSystem'
@@ -186,19 +214,19 @@ if __name__ == "__main__":
                 cardinality = ET.SubElement(dataRepresentation,'cardinality')
                 cardinality.text='single'
 
-            jobs_dictionary[job]['executed'] = True  
+            jobs_dictionary[job]['executed'] = True
 
             for child in jobs_dictionary[job]['parent']:
                 jobs_dictionary[child]['depends'].remove(job)
-            
-        
-        
+
+
+
         for job in jobs_dictionary:
             if len(jobs_dictionary[job]['depends']) == 0 and jobs_dictionary[job]['executed'] == False:
                 #print(job)
                 independent_jobs.append(job)
-        
-        
+
+
 
     last_activity = jobs_dictionary.keys()[-1]
     workflow_output = ET.SubElement(agwl_format,'cgwdOutput')
@@ -215,7 +243,7 @@ if __name__ == "__main__":
             cardinality = ET.SubElement(dataRepresentation,'cardinality')
             cardinality.text='single'
 
-    
+
 
     #pretty print of the workflow
     #rough_string = ET.tostring(agwl_format, 'utf-8')
@@ -234,14 +262,14 @@ if __name__ == "__main__":
     activities_string = 'parser-workflow.activities='
     for job in  jobs_dictionary:
         activities_string += 'parser-workflow\\:'+job+" "
-    print(activities_string)    
+    print(activities_string)
 
 
     for job in  jobs_dictionary:
         print('parser-workflow:\\'+job+'.executable='+jobs_dictionary[job]['executable'])
         usage_string = 'parser-workflow:\\'+job+'.usage='
 
-        for arg in jobs_dictionary[job]['arguments']:            
+        for arg in jobs_dictionary[job]['arguments']:
             usage_string += ''.join(arg)
         print(usage_string)
 
@@ -249,16 +277,14 @@ if __name__ == "__main__":
         for file in jobs_dictionary[job]['inputs'][:-1]:
             input_ports += file+' '+file+' agwl:file'+' AND \\\n'
 
-        if len(jobs_dictionary[job]['inputs']) > 1 :    
+        if len(jobs_dictionary[job]['inputs']) > 1 :
             input_ports += jobs_dictionary[job]['inputs'][-1] +' '+jobs_dictionary[job]['inputs'][-1]+' agwl:file'
         print(input_ports)
-    
+
         output_ports = 'parser-workflow:\\'+job+'.outports='
         for file in jobs_dictionary[job]['outputs'][:-1]:
             output_ports += file+' '+file+' agwl:file'+' AND \\\n'
-            
-        if len(jobs_dictionary[job]['outputs']) > 1 :    
+
+        if len(jobs_dictionary[job]['outputs']) > 1 :
             output_ports += jobs_dictionary[job]['outputs'][-1] +' '+ jobs_dictionary[job]['outputs'][-1]+' agwl:file'
         print(output_ports)
-
-        

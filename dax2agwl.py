@@ -25,6 +25,8 @@ import os
 import xml.etree.ElementTree as ET
 import collections
 from xml.dom import minidom
+import ntpath
+
 
 def buildFilesDictionary(files):
     files_dictionary = {}
@@ -87,6 +89,7 @@ def buildJobsDictionary(jobs,dependencies):
                 jobs_dictionary[job.attrib['id']]['outputs'].append(use.attrib['name'])
 
         jobs_dictionary[job.attrib['id']]['depends'] = []
+        jobs_dictionary[job.attrib['id']]['unmetDependencies'] = []
         jobs_dictionary[job.attrib['id']]['parent'] = []
         jobs_dictionary[job.attrib['id']]['executed'] = False
 
@@ -95,6 +98,7 @@ def buildJobsDictionary(jobs,dependencies):
         parents = dependence.findall('{http://pegasus.isi.edu/schema/DAX}parent')
         for parent in parents:
             jobs_dictionary[dependence.attrib['ref']]['depends'].append(parent.attrib['ref'])
+            jobs_dictionary[dependence.attrib['ref']]['unmetDependencies'].append(parent.attrib['ref'])
             jobs_dictionary[parent.attrib['ref']]['parent'].append(dependence.attrib['ref'])
 
 
@@ -122,6 +126,14 @@ def addWorkflowInputs(agwl_format,files_dictionary):
         cardinality.text='single'
     return agwl_format
 ####addWorkflowInputs
+
+def readyToExecuteJobs(jobs_dictionary):
+    independent_jobs = []
+    for job in jobs_dictionary:
+        if len(jobs_dictionary[job]['unmetDependencies']) == 0 and jobs_dictionary[job]['executed'] == False:
+            independent_jobs.append(job)
+    return independent_jobs
+####readyToExecuteJobs
 
 
 
@@ -152,21 +164,12 @@ if __name__ == "__main__":
     #add inputs to a given workflow, based on the files_dictionary
     agwl_format = addWorkflowInputs(agwl_format,files_dictionary)
 
-
     # getting the tasks to be executed
     body = ET.SubElement(agwl_format,'cgwdBody')
 
-    #jobs_dictionary = collections.OrderedDict(sorted(jobs_dictionary.items())) # we created sorted already
 
 
-
-    independent_jobs = []
-    for job in jobs_dictionary:
-        if len(jobs_dictionary[job]['depends']) == 0 and jobs_dictionary[job]['executed'] == False:
-          #  print job
-            independent_jobs.append(job)
-
-
+    independent_jobs = readyToExecuteJobs(jobs_dictionary)
     fork_counter = 1
     while len(independent_jobs) > 0 :
 
@@ -184,9 +187,7 @@ if __name__ == "__main__":
 
         while len(independent_jobs) > 0 :
             job = independent_jobs[0]
-            #print('considering',job)
             independent_jobs.remove(job)
-        #for job in independent_jobs:
 
             element = body
             if parallel_mode:
@@ -237,16 +238,11 @@ if __name__ == "__main__":
             jobs_dictionary[job]['executed'] = True
 
             for child in jobs_dictionary[job]['parent']:
-                jobs_dictionary[child]['depends'].remove(job)
+                jobs_dictionary[child]['unmetDependencies'].remove(job)
 
 
 
-        for job in jobs_dictionary:
-            if len(jobs_dictionary[job]['depends']) == 0 and jobs_dictionary[job]['executed'] == False:
-                #print(job)
-                independent_jobs.append(job)
-
-
+        independent_jobs = readyToExecuteJobs(jobs_dictionary)
 
     last_activity = jobs_dictionary.keys()[-1]
     workflow_output = ET.SubElement(agwl_format,'cgwdOutput')
@@ -265,10 +261,8 @@ if __name__ == "__main__":
 
 
 
-    #pretty print of the workflow
     #rough_string = ET.tostring(agwl_format, 'utf-8')
     #reparsed = minidom.parseString(rough_string)
-
     #print(reparsed.toprettyxml(indent="  "))
 
     #generation of the gwld file
@@ -278,15 +272,15 @@ if __name__ == "__main__":
     print('parser-workflow.environment = ssh')
     print('DELIM = AND')
     print('')
-
     activities_string = 'parser-workflow.activities='
     for job in  jobs_dictionary:
         activities_string += 'parser-workflow\\:'+job+" "
     print(activities_string)
 
+#executables_dictionary[jobs_dictionary[job]['executable']]
 
     for job in  jobs_dictionary:
-        print('parser-workflow:\\'+job+'.executable='+jobs_dictionary[job]['executable'])
+        print('parser-workflow:\\'+job+'.executable='+ntpath.basename(executables_dictionary[jobs_dictionary[job]['executable']]))
         usage_string = 'parser-workflow:\\'+job+'.usage='
 
         for arg in jobs_dictionary[job]['arguments']:

@@ -195,7 +195,7 @@ if __name__ == "__main__":
                 element = section
 
             activity = ET.SubElement(element,'activity')
-            activity.attrib = {'function':'Function','name':job,'type':job}
+            activity.attrib = {'function':'Function','name':job,'type':'soy:'+job}
 
             # inputs are based on dependencies
             dataIns = ET.SubElement(activity,'dataIns')
@@ -261,33 +261,32 @@ if __name__ == "__main__":
 
 
 
-    #rough_string = ET.tostring(agwl_format, 'utf-8')
-    #reparsed = minidom.parseString(rough_string)
-    #print(reparsed.toprettyxml(indent="  "))
+#    rough_string = ET.tostring(agwl_format, 'utf-8')
+#    reparsed = minidom.parseString(rough_string)
+#    print(reparsed.toprettyxml(indent="  "))
 
     #generation of the gwld file
-    print('application = parser-workflow')
-    print('parser-workflow.type = parser-workflow')
-    print('parser-workflow.domain = parser-workflow')
-    print('parser-workflow.environment = ssh')
+    print('application = soybean')
+    print('soybean.type = soy')
+    print('soybean.domain = medicine')
+    print('soybean.environment = ssh')
     print('DELIM = AND')
     print('')
-    activities_string = 'parser-workflow.activities='
+    activities_string = 'soybean.activities='
     for job in  jobs_dictionary:
-        activities_string += 'parser-workflow\\:'+job+" "
+        activities_string += 'soy\\:'+job+" "
     print(activities_string)
 
-#executables_dictionary[jobs_dictionary[job]['executable']]
 
     for job in  jobs_dictionary:
-        print('parser-workflow:\\'+job+'.executable='+ntpath.basename(executables_dictionary[jobs_dictionary[job]['executable']]))
-        usage_string = 'parser-workflow:\\'+job+'.usage='
+        print('soy\\:'+job+'.executable='+ntpath.basename(executables_dictionary[jobs_dictionary[job]['executable']]))
+        usage_string = 'soy:\\'+job+'.usage='
 
         for arg in jobs_dictionary[job]['arguments']:
             usage_string += ''.join(arg)
         print(usage_string)
 
-        input_ports = 'parser-workflow:\\'+job+'.inports='
+        input_ports = 'soy\\:'+job+'.inports='
         for file in jobs_dictionary[job]['inputs'][:-1]:
             input_ports += file+' '+file+' agwl:file'+' AND \\\n'
 
@@ -295,7 +294,7 @@ if __name__ == "__main__":
             input_ports += jobs_dictionary[job]['inputs'][-1] +' '+jobs_dictionary[job]['inputs'][-1]+' agwl:file'
         print(input_ports)
 
-        output_ports = 'parser-workflow:\\'+job+'.outports='
+        output_ports = 'soy\\:'+job+'.outports='
         for file in jobs_dictionary[job]['outputs'][:-1]:
             output_ports += file+' '+file+' agwl:file'+' AND \\\n'
 

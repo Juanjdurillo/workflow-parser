@@ -261,8 +261,39 @@ if __name__ == "__main__":
 
 
 
-    rough_string = ET.tostring(agwl_format, 'utf-8')
-    reparsed = minidom.parseString(rough_string)
-    print(reparsed.toprettyxml(indent="  "))
+    #generation of the gwld file
+    print('application = soybean')
+    print('soybean.type = soy')
+    print('soybean.domain = medicine')
+    print('soybean.environment = ssh')
+    print('DELIM = AND')
+    print('')
+    activities_string = 'soybean.activities='
+    for job in  jobs_dictionary:
+        activities_string += 'soy\\:'+job+" "
+    print(activities_string)
 
 
+    for job in  jobs_dictionary:
+        print('soy\\:'+job+'.executable='+ntpath.basename(executables_dictionary[jobs_dictionary[job]['executable']]))
+        usage_string = 'soy:\\'+job+'.usage='
+
+        for arg in jobs_dictionary[job]['arguments']:
+            usage_string += ''.join(arg)
+        print(usage_string)
+
+        input_ports = 'soy\\:'+job+'.inports='
+        for file in jobs_dictionary[job]['inputs'][:-1]:
+            input_ports += file+' '+file+' agwl:file'+' AND \\\n'
+
+        if len(jobs_dictionary[job]['inputs']) > 1 :
+            input_ports += jobs_dictionary[job]['inputs'][-1] +' '+jobs_dictionary[job]['inputs'][-1]+' agwl:file'
+        print(input_ports)
+
+        output_ports = 'soy\\:'+job+'.outports='
+        for file in jobs_dictionary[job]['outputs'][:-1]:
+            output_ports += file+' '+file+' agwl:file'+' AND \\\n'
+
+        if len(jobs_dictionary[job]['outputs']) > 1 :
+            output_ports += jobs_dictionary[job]['outputs'][-1] +' '+ jobs_dictionary[job]['outputs'][-1]+' agwl:file'
+        print(output_ports)
